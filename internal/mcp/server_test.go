@@ -291,6 +291,78 @@ func TestHandleEvaluate(t *testing.T) {
 	}
 }
 
+func TestStandaloneExpressionEvaluation(t *testing.T) {
+	ctx := context.Background()
+	s := NewServer(nil)
+
+	t1, t2 := mcp.NewInMemoryTransports()
+	if _, err := s.Connect(ctx, t1, nil); err != nil {
+		t.Fatalf("Connect failed: %v", err)
+	}
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "1.0.0"}, nil)
+	session, err := client.Connect(ctx, t2, nil)
+	if err != nil {
+		t.Fatalf("client.Connect failed: %v", err)
+	}
+	defer session.Close()
+
+	// Neither an envConfig nor test case bindings are supplied since the
+	// expression is standalone.
+	evalRes, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name: "cel_evaluate",
+		Arguments: map[string]any{
+			"expr": "'hello'.size() == 5",
+			"testCases": []any{
+				map[string]any{
+					"testCase": "standalone",
+					"expected": true,
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool cel_evaluate failed: %v", err)
+	}
+	if evalRes.IsError {
+		t.Fatalf("cel_evaluate failed: %v", evalRes.Content)
+	}
+
+	compileRes, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "cel_compile",
+		Arguments: map[string]any{"expr": "1 + 1"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool cel_compile failed: %v", err)
+	}
+	if compileRes.IsError {
+		t.Fatalf("cel_compile failed: %v", compileRes.Content)
+	}
+}
+
+func TestHandleEvaluateStandalone(t *testing.T) {
+	ctx := context.Background()
+
+	h := &toolsHandler{}
+	_, out, err := h.handleEvaluate(ctx, &mcp.CallToolRequest{}, EvaluateArgs{
+		Expr: "1 + 1",
+		TestCases: []tools.TestCase{
+			{TestCase: "standalone", Expected: 2.0},
+		},
+	})
+	if err != nil {
+		t.Fatalf("handleEvaluate failed: %v", err)
+	}
+
+	tr := out.(*tools.EvaluateExprOutput)
+	if len(tr.TestResults) != 1 {
+		t.Fatalf("expected 1 evaluation result, got %d", len(tr.TestResults))
+	}
+	if tr.TestResults[0].Status != "pass" {
+		t.Errorf("expected 'pass', got '%s'", tr.TestResults[0].Status)
+	}
+}
+
 func TestHandleGeneratePrompt(t *testing.T) {
 	ctx := context.Background()
 

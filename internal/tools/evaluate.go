@@ -41,7 +41,7 @@ type EvaluateExprOutput struct {
 // TestCase is a test case for evaluation.
 type TestCase struct {
 	TestCase string         `json:"testCase" jsonschema_description:"The name of the test case."`
-	Bindings map[string]any `json:"bindings" jsonschema_description:"The variable bindings for the expression."`
+	Bindings map[string]any `json:"bindings,omitempty" jsonschema_description:"The variable bindings for the expression. May be omitted or empty when the expression does not reference any variables."`
 	Expected any            `json:"expected" jsonschema_description:"The expected JSON output value of the expression."`
 }
 
@@ -136,39 +136,44 @@ func EvaluateCEL(expr string, envConfig *Config, testCases []TestCase, opts ...c
 			})
 			continue
 		}
-		if out != nil {
-			coverageTracker.Record(details)
-			val, err := out.ConvertToNative(types.JSONValueType)
-			if err != nil {
-				status = fmt.Sprintf("unexpected output type: %v", out.Value())
-				results = append(results, TestResult{
-					TestCase: tc.TestCase,
-					Status:   status,
-				})
-				continue
-			}
-			valPB := protojson.Format(val.(proto.Message))
-			var valJSON any
-			err = json.Unmarshal([]byte(valPB), &valJSON)
-			if err != nil {
-				status = fmt.Sprintf("unexpected output type: %v", out.Value())
-				results = append(results, TestResult{
-					TestCase: tc.TestCase,
-					Status:   status,
-				})
-				continue
-			}
-			eq := reflect.DeepEqual(valJSON, tc.Expected)
-			if eq {
-				status = "pass"
-			} else {
-				status = fmt.Sprintf("failed: got %v, expected %v", valJSON, tc.Expected)
-			}
+		if out == nil {
 			results = append(results, TestResult{
 				TestCase: tc.TestCase,
 				Status:   status,
 			})
+			continue
 		}
+		coverageTracker.Record(details)
+		val, err := out.ConvertToNative(types.JSONValueType)
+		if err != nil {
+			status = fmt.Sprintf("unexpected output type: %v", out.Value())
+			results = append(results, TestResult{
+				TestCase: tc.TestCase,
+				Status:   status,
+			})
+			continue
+		}
+		valPB := protojson.Format(val.(proto.Message))
+		var valJSON any
+		err = json.Unmarshal([]byte(valPB), &valJSON)
+		if err != nil {
+			status = fmt.Sprintf("unexpected output type: %v", out.Value())
+			results = append(results, TestResult{
+				TestCase: tc.TestCase,
+				Status:   status,
+			})
+			continue
+		}
+		eq := reflect.DeepEqual(valJSON, tc.Expected)
+		if eq {
+			status = "pass"
+		} else {
+			status = fmt.Sprintf("failed: got %v, expected %v", valJSON, tc.Expected)
+		}
+		results = append(results, TestResult{
+			TestCase: tc.TestCase,
+			Status:   status,
+		})
 	}
 
 	report := coverageTracker.GenerateReport()

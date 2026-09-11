@@ -90,9 +90,9 @@ func TestCLI_Compile(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "compile missing env",
+			name:    "compile standalone expression without env",
 			args:    []string{"compile", "-expr", "1 + 1"},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name:    "compile invalid expression syntax",
@@ -177,6 +177,17 @@ func TestCLI_Eval_DefaultEmptyBindings(t *testing.T) {
 	err := run([]string{"eval", "-env", envJSON, "1 + 1"}, &stdout, &stderr, nil)
 	if err != nil {
 		t.Fatalf("run(eval default bindings) failed: %v", err)
+	}
+	if !strings.Contains(stdout.String(), `"status": "pass"`) {
+		t.Errorf("expected pass status, got: %s", stdout.String())
+	}
+}
+
+func TestCLI_Eval_StandaloneWithoutEnv(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"eval", "-expected", "true", "'hello'.size() == 5"}, &stdout, &stderr, nil)
+	if err != nil {
+		t.Fatalf("run(eval standalone) failed: %v (stderr: %s)", err, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"status": "pass"`) {
 		t.Errorf("expected pass status, got: %s", stdout.String())

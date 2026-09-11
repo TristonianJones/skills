@@ -39,6 +39,9 @@ composed of multiple test cases. Within a `testCase`, the `bindings` values must
 match the `inputSchema` from the compile command. The `expected` value must
 match the `outputSchema` from the compile command.
 
+If the expression is standalone, meaning it does not reference any variables,
+the `bindings` may be omitted or left empty.
+
 If the test input schema contains an `additionalProperties` or `items` key be
 sure to generate tests where the objects are populated and empty to validate the
 robustness of the expression to unexpected inputs.
@@ -52,7 +55,9 @@ Reference examples in `examples/` if unsure:
 ### 3. Run the Tests
 
 Run tests by calling the `cel_evaluate` tool with the expression as `expr`, the
-environment as `envConfig`, and the test suite content as `testCases`.
+environment as `envConfig`, and the test suite content as `testCases`. The
+`envConfig` may be omitted for standalone expressions which only rely on the CEL
+standard library.
 
 ### 4. Evaluate Coverage and Iterate
 

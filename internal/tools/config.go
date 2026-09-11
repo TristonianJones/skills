@@ -311,7 +311,14 @@ func ConfigFromJSON(configJSON string) (*Config, error) {
 }
 
 // EnvFromConfig takes a Config and converts it to a cel-go Env.
+//
+// A nil config is treated as an empty configuration, which yields a standard
+// CEL environment without additional variables, functions, or types. This
+// supports standalone expressions which only rely on the CEL standard library.
 func EnvFromConfig(envConfig *Config, opts ...cel.EnvOption) (*cel.Env, error) {
+	if envConfig == nil {
+		envConfig = &Config{}
+	}
 	celConfig, err := envConfig.ToCELConfig()
 	if err != nil {
 		return nil, err
