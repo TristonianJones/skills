@@ -141,6 +141,23 @@ func TestEvaluateCEL(t *testing.T) {
 			wantContains: `"status":"pass"`,
 			wantErr:      false,
 		},
+		{
+			name:         "standalone expression without env config",
+			expr:         `"hello".size() == 5`,
+			envConfig:    nil,
+			testCases:    []TestCase{{TestCase: "test-standalone", Expected: true}},
+			wantContains: `"testCase":"test-standalone","status":"pass"`,
+			wantErr:      false,
+			wantCoverage: "Node: 100.00%, Branch: 50.00%",
+		},
+		{
+			name:         "standalone expression with omitted bindings",
+			expr:         `1 + 1`,
+			envConfig:    envJSON,
+			testCases:    []TestCase{{TestCase: "test-no-bindings", Expected: 2.0}},
+			wantContains: `"testCase":"test-no-bindings","status":"pass"`,
+			wantErr:      false,
+		},
 	}
 
 	for _, tt := range tests {

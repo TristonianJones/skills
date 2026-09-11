@@ -106,12 +106,16 @@ func loadContentOrStdin(val string, stdin io.Reader) (string, error) {
 	return val, nil
 }
 
-func loadEnvAndOpts(envFlag, fdsFlag string, stdin io.Reader) (*tools.Config, []cel.EnvOption, error) {
+// loadEnvAndOpts resolves the environment configuration and CEL options from the
+// command flags. When requireEnv is false, a missing environment yields a nil
+// config, which results in a standard CEL environment suitable for standalone
+// expressions.
+func loadEnvAndOpts(envFlag, fdsFlag string, stdin io.Reader, requireEnv bool) (*tools.Config, []cel.EnvOption, error) {
 	envContent, err := loadContentOrStdin(envFlag, stdin)
 	if err != nil {
 		return nil, nil, err
 	}
-	if envContent == "" {
+	if envContent == "" && requireEnv {
 		return nil, nil, errors.New("environment configuration is required (use -env <path|json>)")
 	}
 
@@ -139,7 +143,7 @@ func runCompile(args []string, stdout, stderr io.Writer, stdin io.Reader) error 
 	exprFlag := fs.String("expr", "", "CEL expression string")
 
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: cel-expr compile -env <path|json> [-expr <expr>] [expression]")
+		fmt.Fprintln(stderr, "Usage: cel-expr compile [-env <path|json>] [-expr <expr>] [expression]")
 		fmt.Fprintln(stderr, "\nFlags:")
 		fs.PrintDefaults()
 	}
@@ -159,7 +163,7 @@ func runCompile(args []string, stdout, stderr io.Writer, stdin io.Reader) error 
 		return errors.New("expression is required (use -expr <expr> or pass as argument)")
 	}
 
-	cfg, opts, err := loadEnvAndOpts(*envFlag, *fdsFlag, stdin)
+	cfg, opts, err := loadEnvAndOpts(*envFlag, *fdsFlag, stdin, false)
 	if err != nil {
 		return err
 	}
@@ -189,7 +193,7 @@ func runEval(args []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	expectedFlag := fs.String("expected", "", "Expected output value for single test case binding (JSON literal or string)")
 
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: cel-expr eval -env <path|json> [-tests <path|json>] [-bindings <path|json>] [expression]")
+		fmt.Fprintln(stderr, "Usage: cel-expr eval [-env <path|json>] [-tests <path|json>] [-bindings <path|json>] [expression]")
 		fmt.Fprintln(stderr, "\nFlags:")
 		fs.PrintDefaults()
 	}
@@ -219,14 +223,18 @@ func runEval(args []string, stdout, stderr io.Writer, stdin io.Reader) error {
 		if err := json.Unmarshal([]byte(rawTests), &testCases); err != nil {
 			return fmt.Errorf("failed parsing test cases JSON: %w", err)
 		}
-	} else if *bindingsFlag != "" {
-		rawBindings, err := loadFileOrRawJSON(*bindingsFlag)
-		if err != nil {
-			return fmt.Errorf("loading bindings: %w", err)
-		}
-		var bindings map[string]any
-		if err := json.Unmarshal([]byte(rawBindings), &bindings); err != nil {
-			return fmt.Errorf("failed parsing bindings JSON: %w", err)
+	} else if *bindingsFlag != "" || *expectedFlag != "" {
+		// Bindings are optional here: a standalone expression may only declare
+		// an expected result.
+		bindings := map[string]any{}
+		if *bindingsFlag != "" {
+			rawBindings, err := loadFileOrRawJSON(*bindingsFlag)
+			if err != nil {
+				return fmt.Errorf("loading bindings: %w", err)
+			}
+			if err := json.Unmarshal([]byte(rawBindings), &bindings); err != nil {
+				return fmt.Errorf("failed parsing bindings JSON: %w", err)
+			}
 		}
 
 		var expected any
@@ -250,7 +258,7 @@ func runEval(args []string, stdout, stderr io.Writer, stdin io.Reader) error {
 		})
 	}
 
-	cfg, opts, err := loadEnvAndOpts(*envFlag, *fdsFlag, stdin)
+	cfg, opts, err := loadEnvAndOpts(*envFlag, *fdsFlag, stdin, false)
 	if err != nil {
 		return err
 	}
@@ -303,7 +311,7 @@ func runEnv(args []string, stdout, stderr io.Writer, stdin io.Reader) error {
 		return err
 	}
 
-	cfg, opts, err := loadEnvAndOpts(*envFlag, *fdsFlag, stdin)
+	cfg, opts, err := loadEnvAndOpts(*envFlag, *fdsFlag, stdin, true)
 	if err != nil {
 		return err
 	}
@@ -339,7 +347,7 @@ func runPrompt(args []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	fs.StringVar(promptFlag, "user_prompt", "", "Alias for -prompt")
 
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: cel-expr prompt -env <path|json> [-prompt <requirement>] [requirement text]")
+		fmt.Fprintln(stderr, "Usage: cel-expr prompt [-env <path|json>] [-prompt <requirement>] [requirement text]")
 		fmt.Fprintln(stderr, "\nFlags:")
 		fs.PrintDefaults()
 	}
@@ -359,7 +367,7 @@ func runPrompt(args []string, stdout, stderr io.Writer, stdin io.Reader) error {
 		return errors.New("prompt requirement is required (use -prompt <text> or pass as arguments)")
 	}
 
-	cfg, opts, err := loadEnvAndOpts(*envFlag, *fdsFlag, stdin)
+	cfg, opts, err := loadEnvAndOpts(*envFlag, *fdsFlag, stdin, false)
 	if err != nil {
 		return err
 	}

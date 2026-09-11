@@ -144,19 +144,19 @@ type CreateEnvConfigArgs struct {
 
 // GeneratePromptArgs is the arguments for the cel_generate_prompt tool.
 type GeneratePromptArgs struct {
-	EnvConfig  *tools.Config `json:"envConfig" jsonschema_description:"The JSON string representing the CEL environment schema."`
+	EnvConfig  *tools.Config `json:"envConfig,omitempty" jsonschema_description:"The JSON string representing the CEL environment schema. May be omitted for standalone expressions which only use the CEL standard library."`
 	UserPrompt string        `json:"userPrompt" jsonschema_description:"The user prompt to generate the CEL expression for."`
 }
 
 // CompileArgs is the arguments for the cel_compile tool.
 type CompileArgs struct {
-	EnvConfig *tools.Config `json:"envConfig" jsonschema_description:"The JSON string representing the CEL environment schema."`
+	EnvConfig *tools.Config `json:"envConfig,omitempty" jsonschema_description:"The JSON string representing the CEL environment schema. May be omitted for standalone expressions which only use the CEL standard library."`
 	Expr      string        `json:"expr" jsonschema_description:"The CEL expression to compile."`
 }
 
 // EvaluateArgs is the arguments for the cel_evaluate tool.
 type EvaluateArgs struct {
-	EnvConfig *tools.Config    `json:"envConfig" jsonschema_description:"The JSON string representing the CEL environment schema."`
+	EnvConfig *tools.Config    `json:"envConfig,omitempty" jsonschema_description:"The JSON string representing the CEL environment schema. May be omitted for standalone expressions which only use the CEL standard library."`
 	Expr      string           `json:"expr" jsonschema_description:"The CEL expression to evaluate."`
 	TestCases []tools.TestCase `json:"testCases" jsonschema_description:"The test cases for evaluation."`
 }
@@ -187,15 +187,24 @@ func (h *toolsHandler) handleCreateEnvConfig(ctx context.Context, request *mcp.C
 	}, nil, nil
 }
 
+// resolveEnvConfig returns the environment configuration to use for a request.
+//
+// Request-supplied configurations take precedence over the server's fixed
+// environment. When neither is present an empty configuration is returned so
+// that standalone expressions relying only on the CEL standard library may
+// still be compiled and evaluated.
+func (h *toolsHandler) resolveEnvConfig(envConfig *tools.Config) *tools.Config {
+	if envConfig != nil {
+		return envConfig
+	}
+	if h.fixedEnv != nil {
+		return h.fixedEnv
+	}
+	return &tools.Config{}
+}
+
 func (h *toolsHandler) handleCompile(ctx context.Context, request *mcp.CallToolRequest, args CompileArgs) (*mcp.CallToolResult, any, error) {
-	envConfig := args.EnvConfig
-	if envConfig == nil {
-		envConfig = h.fixedEnv
-	}
-	if envConfig == nil {
-		return nil, nil, fmt.Errorf("environment configuration is required")
-	}
-	res, err := tools.CompileCEL(args.Expr, envConfig, h.opts...)
+	res, err := tools.CompileCEL(args.Expr, h.resolveEnvConfig(args.EnvConfig), h.opts...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -203,14 +212,7 @@ func (h *toolsHandler) handleCompile(ctx context.Context, request *mcp.CallToolR
 }
 
 func (h *toolsHandler) handleEvaluate(ctx context.Context, request *mcp.CallToolRequest, args EvaluateArgs) (*mcp.CallToolResult, any, error) {
-	envConfig := args.EnvConfig
-	if envConfig == nil {
-		envConfig = h.fixedEnv
-	}
-	if envConfig == nil {
-		return nil, nil, fmt.Errorf("environment configuration is required")
-	}
-	res, err := tools.EvaluateCEL(args.Expr, envConfig, args.TestCases, h.opts...)
+	res, err := tools.EvaluateCEL(args.Expr, h.resolveEnvConfig(args.EnvConfig), args.TestCases, h.opts...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -218,14 +220,7 @@ func (h *toolsHandler) handleEvaluate(ctx context.Context, request *mcp.CallTool
 }
 
 func (h *toolsHandler) handleGeneratePrompt(ctx context.Context, request *mcp.CallToolRequest, args GeneratePromptArgs) (*mcp.CallToolResult, any, error) {
-	envConfig := args.EnvConfig
-	if envConfig == nil {
-		envConfig = h.fixedEnv
-	}
-	if envConfig == nil {
-		return nil, nil, fmt.Errorf("environment configuration is required")
-	}
-	res, err := tools.GeneratePrompt(envConfig, args.UserPrompt, h.opts...)
+	res, err := tools.GeneratePrompt(h.resolveEnvConfig(args.EnvConfig), args.UserPrompt, h.opts...)
 	if err != nil {
 		return nil, nil, err
 	}
