@@ -13,6 +13,8 @@ The `cel-expr-mcp` MCP server provides the following tools:
 - `cel_compile`: Compiles a CEL expression to validate syntax, correctness, and
    type checking against an environment definition.
 - `cel_evaluate`: Evaluates a compiled expression against provided test cases.
+- `cel_evaluate_conformance`: Evaluates CEL conformance tests from cel-spec
+   textproto files or content.
 
 The server accepts startup flags to tailor the tool experience:
 
@@ -24,6 +26,6 @@ The server accepts startup flags to tailor the tool experience:
 
 ## Available Skills
 
-To understand how to best use these tools, please refer to the `cel_authoring`
-and `cel_debugging` skills, which will be automatically available to the agent
-when this extension is loaded.
+To understand how to best use these tools, please refer to the `cel_authoring`,
+`cel_testing`, `cel_debugging`, and `cel_conformance_testing` skills, which will
+be automatically available to the agent when this extension is loaded.
