@@ -83,9 +83,9 @@ find_testdata_dir() {
   fi
 
   local candidates=(
-    "$(go env GOPATH 2>/dev/null || echo '')/src/github.com/google/cel-spec/tests/simple/testdata"
+    "$(go env GOPATH 2>/dev/null || echo '')/src/github.com/cel-expr/cel-spec/tests/simple/testdata"
     "${REPO_ROOT}/../cel-spec/tests/simple/testdata"
-    "${REPO_ROOT}/../../google/cel-spec/tests/simple/testdata"
+    "${REPO_ROOT}/../../cel-expr/cel-spec/tests/simple/testdata"
   )
 
   for dir in "${candidates[@]}"; do

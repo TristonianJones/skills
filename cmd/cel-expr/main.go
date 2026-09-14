@@ -351,7 +351,7 @@ func runConformance(args []string, stdout, stderr io.Writer, stdin io.Reader) er
 	var opts []cel.EnvOption
 	if *envFlag != "" || *fdsFlag != "" {
 		var err error
-		cfg, opts, err = loadEnvAndOpts(*envFlag, *fdsFlag, stdin)
+		cfg, opts, err = loadEnvAndOpts(*envFlag, *fdsFlag, stdin, false)
 		if err != nil {
 			return err
 		}
