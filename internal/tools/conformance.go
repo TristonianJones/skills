@@ -81,7 +81,7 @@ type ConformanceParams struct {
 
 // DefaultConformanceSkipTests contains the standard set of conformance test prefixes skipped by cel-go.
 // These correspond to tests that require future specification enhancements, pending spec updates,
-// or known cel-go platform limitations (derived from google/cel-go/conformance/BUILD.bazel).
+// or known cel-go platform limitations (derived from cel-expr/cel-spec/tests/simple/BUILD.bazel).
 var defaultConformanceSkipTests = []string{
 	// Failing conformance tests in cel-go
 	"fields/qualified_identifier_resolution/map_key_float",
@@ -109,7 +109,7 @@ var defaultConformanceSkipTests = []string{
 
 // DefaultConformanceSkipTests returns a copy of the standard set of conformance test prefixes skipped by cel-go.
 // These correspond to tests that require future specification enhancements, pending spec updates,
-// or known cel-go platform limitations (derived from google/cel-go/conformance/BUILD.bazel).
+// or known cel-go platform limitations (derived from cel-expr/cel-spec/tests/simple/BUILD.bazel).
 func DefaultConformanceSkipTests() []string {
 	cp := make([]string, len(defaultConformanceSkipTests))
 	copy(cp, defaultConformanceSkipTests)
@@ -651,7 +651,7 @@ func FormatSimpleTest(test *testpb.SimpleTest) (string, error) {
 }
 
 // refValueToExprValue converts a CEL ref.Val result into an ExprValue protobuf message.
-// Derived from google/cel-go/conformance/conformance_test.go (refValueToExprValue).
+// Derived from cel-expr/cel-go/conformance/conformance_test.go (refValueToExprValue).
 func refValueToExprValue(res ref.Val) (*expr.ExprValue, error) {
 	if types.IsUnknown(res) {
 		return &expr.ExprValue{
@@ -672,7 +672,7 @@ func refValueToExprValue(res ref.Val) (*expr.ExprValue, error) {
 }
 
 // exprValueToRefValue converts an ExprValue protobuf message to a CEL ref.Val.
-// Derived from google/cel-go/conformance/conformance_test.go (exprValueToRefValue).
+// Derived from cel-expr/cel-go/conformance/conformance_test.go (exprValueToRefValue).
 func exprValueToRefValue(adapter types.Adapter, ev *expr.ExprValue) (ref.Val, error) {
 	if ev == nil {
 		return nil, nil
@@ -699,7 +699,7 @@ func exprValueToRefValue(adapter types.Adapter, ev *expr.ExprValue) (ref.Val, er
 
 // equalValues compares expected and actual expr.Value protobuf messages for semantic equality.
 // Handles IEEE-754 NaN semantics, list order preservation, and order-insensitive map entry comparison.
-// Derived from google/cel-go/conformance/conformance_test.go (diffValue / equalValues).
+// Derived from cel-expr/cel-go/conformance/conformance_test.go (diffValue / equalValues).
 func equalValues(want, got *expr.Value) bool {
 	if want == nil || got == nil {
 		return want == got
@@ -801,7 +801,7 @@ func equalValues(want, got *expr.Value) bool {
 }
 
 // equalTypes compares expected and actual expr.Type protobuf messages for equality.
-// Derived from google/cel-go/conformance/conformance_test.go (diffType).
+// Derived from cel-expr/cel-go/conformance/conformance_test.go (diffType).
 func equalTypes(want, got *expr.Type) bool {
 	return proto.Equal(want, got)
 }
@@ -940,7 +940,7 @@ func jsonToValue(val any) (*expr.Value, error) {
 }
 
 // celBlockLib simulates indexed arguments and test-only macros for cel.block conformance tests.
-// Derived from google/cel-go/conformance/conformance_test.go (celBlockLib, celBlock, celIndex, celCompreVar).
+// Derived from cel-expr/cel-go/conformance/conformance_test.go (celBlockLib, celBlock, celIndex, celCompreVar).
 type celBlockLib struct{}
 
 func (celBlockLib) LibraryName() string {

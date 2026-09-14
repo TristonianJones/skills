@@ -19,7 +19,7 @@ or Protocol Buffer JSON (`protojson`) using the protobuf schema defined in `cel-
 
 ### Repository Location
 
-All standard conformance tests are maintained in the [google/cel-spec](https://github.com/google/cel-spec)
+All standard conformance tests are maintained in the [cel-expr/cel-spec](https://github.com/cel-expr/cel-spec)
 repository on GitHub under:
 ```
 tests/simple/testdata/
@@ -205,4 +205,4 @@ Follow this workflow to contribute conformance tests to the upstream specificati
 
 5. **Submit a Pull Request**:
    - Commit changes with a descriptive message referencing the relevant specification chapter or issue.
-   - Open a Pull Request against `google/cel-spec:master`.
+   - Open a Pull Request against `cel-expr/cel-spec:master`.
