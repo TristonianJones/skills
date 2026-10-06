@@ -103,7 +103,7 @@ section {
    - Keep expressions as small as possible so test failures isolate the exact flaw.
 
 2. **Language-Agnostic Assertions**:
-   - Conformance tests must pass in Go, C++, and Java runtimes.
+   - Conformance tests must pass in Go, C++, Python, and Java runtimes (see [Target Runtimes Reference](references/target-runtimes.md)).
    - For errors, use `eval_error` or `any_eval_errors`. Avoid asserting implementation-specific error messages unless verifying standardized error codes.
    - For floating point values, account for IEEE-754 semantics (e.g. `NaN != NaN`).
 
@@ -202,6 +202,7 @@ Follow this workflow to contribute conformance tests to the upstream specificati
      ```bash
      bazel test //tests/simple:simple_test
      ```
+   - Validate across target runtimes as described in [Target Runtimes Reference](references/target-runtimes.md).
 
 5. **Submit a Pull Request**:
    - Commit changes with a descriptive message referencing the relevant specification chapter or issue.

@@ -49,7 +49,7 @@ Options:
   -d, --dir <path>       Directory containing cel-spec .textproto files
                          (default: auto-detected from GOPATH or ../cel-spec)
   -f, --filter <str>     Filter test cases by name substring
-  -s, --skip <str>       Additional test prefixes to skip (comma-separated)
+  -s, --skip <str>       Test prefixes to skip (comma-separated)
       --file <name>      Run only a specific test file (e.g. basic.textproto)
   -b, --bin <path>       Path to pre-built cel-expr CLI binary
                          (default: builds a temporary binary via 'go build')
