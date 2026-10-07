@@ -20,6 +20,10 @@ go_deps.gazelle_default_attributes(
         "gazelle:proto disable_global",
     ],
 )
+go_deps.gazelle_override(
+    build_file_generation = "off",
+    path = "cel.dev/expr",
+)
 go_deps.from_file(go_mod = "//:go.mod")
 use_repo(
     go_deps,
