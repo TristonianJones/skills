@@ -46,7 +46,10 @@ flowchart TD
 2.  **Run Symbol Extraction**: Follow the language-specific extraction protocol (Section 3) to extract the enablement API, function overloads, macro registrations, custom types, and version tags.
 3.  **Extract Test Cases**: Inspect corresponding test files to obtain verified CEL expressions and expected outputs or error messages.
 4.  **Populate Colocated `README.md`**: Render the extracted data into `README.md` located in the library's directory following [references/doc_template.md](references/doc_template.md).
-5.  **Test Documentation Snippets**: Validate all code snippets using the `cel-expr-mcp` tools (`cel_create_environment`, `cel_compile`, `cel_evaluate`) guided by the [cel-authoring](../cel-authoring/SKILL.md) and [cel-debugging](../cel-debugging/SKILL.md) skills (Section 4).
+5.  **Test Documentation Snippets**: Validate all code snippets using the
+    `cel-expr` CLI (`env`, `compile`, `eval`) guided by the
+    [cel-authoring](../cel-authoring/SKILL.md) and
+    [cel-debugging](../cel-debugging/SKILL.md) skills (Section 4).
 
 ---
 
@@ -165,13 +168,24 @@ Search under `extensions/src/main/java/dev/cel/extensions/<lib>/` or `CelExtensi
 
 ---
 
-## 4. Testing Documentation Snippets via CEL Environment Config & MCP Tools
+## 4. Testing Documentation Snippets via CEL Environment Config & `cel-expr` CLI
 
-To ensure 100% documentation accuracy, every example expression in the `README.md` must be validated against an active CEL environment using the `cel-expr-mcp` tools alongside the [cel-authoring](../cel-authoring/SKILL.md) and [cel-debugging](../cel-debugging/SKILL.md) skills.
+To ensure 100% documentation accuracy, every example expression in the
+`README.md` must be validated against an active CEL environment using the
+`cel-expr` CLI alongside the [cel-authoring](../cel-authoring/SKILL.md) and
+[cel-debugging](../cel-debugging/SKILL.md) skills:
+
+```bash
+go install github.com/cel-expr/skills/cmd/cel-expr@latest
+alias cel-expr="$(go env GOPATH)/bin/cel-expr"
+```
 
 ### 4.1 Create & Validate Environment Configuration
 
-Create a JSON/YAML environment configuration file (e.g. `env.json`) declaring the library extension and test variables. Follow the [cel-authoring](../cel-authoring/SKILL.md) skill and call the `cel_create_environment` tool to validate the environment configuration:
+Create a JSON/YAML environment configuration file (e.g. `env.json`) declaring
+the library extension and test variables. Follow the
+[cel-authoring](../cel-authoring/SKILL.md) skill and run
+`cel-expr env` to validate the environment configuration:
 
 ```json
 {
@@ -189,41 +203,48 @@ Create a JSON/YAML environment configuration file (e.g. `env.json`) declaring th
 }
 ```
 
-> [!TIP]
-> You can also start the `cel-expr-mcp` server with the environment configuration preloaded using the `-env` (or `-environment`) flag:
-> ```bash
-> cel-expr-mcp -env env.json
-> # or pass inline JSON:
-> cel-expr-mcp -env '{"extensions":[{"name":"math"}],"variables":[{"name":"a","type":"int"},{"name":"b","type":"int"},{"name":"c","type":"int"}]}'
-> ```
-> When started with a fixed environment, MCP tool calls (`cel_compile`, `cel_evaluate`, `cel_generate_prompt`) operate directly against this pre-configured environment without requiring `envConfig` in every call payload.
+```bash
+cel-expr env -env env.json
+```
 
 ### 4.2 Validate Each Example Expression
 
 For each snippet in the documentation:
 
-1.  **Parse & Compile (`cel_compile`)**: Run the expression through `cel_compile` with the environment configuration. Ensure compilation succeeds without unexpected type or overload errors. If compilation fails, use the [cel-debugging](../cel-debugging/SKILL.md) skill to diagnose and fix errors (such as undeclared references, type mismatches, or missing library extensions).
-2.  **Evaluate with Test Inputs (`cel_evaluate`)**: Define test cases providing input variable bindings (e.g., supplying values for all three variables `a`, `b`, and `c`) and the expected result. Run `cel_evaluate` to verify the output matches the documented inline comment:
+1.  **Parse & Compile (`cel-expr compile`)**: Run the expression through
+    `cel-expr compile` with the environment configuration. Ensure compilation
+    succeeds without unexpected type or overload errors:
 
-    ```json
-    [
-      {
-        "testCase": "calculate greatest of three integers",
-        "bindings": {
-          "a": 10,
-          "b": 42,
-          "c": 7
-        },
-        "expected": 42
-      }
-    ]
+    ```bash
+    cel-expr compile -env env.json -expr "<expression>"
     ```
 
-    *   `math.greatest(a, b, c)` with `{a: 10, b: 42, c: 7}` -> evaluates to `42` (`// returns 42`)
-    *   `math.least(a, b, c)` with `{a: 10, b: 42, c: 7}` -> evaluates to `7` (`// returns 7`)
-    *   `math.greatest([a, b, c])` with `{a: 10, b: 42, c: 7}` -> evaluates to `42` (`// returns 42`)
+    If compilation fails, use the [cel-debugging](../cel-debugging/SKILL.md)
+    skill to diagnose and fix errors (such as undeclared references, type
+    mismatches, or missing library extensions).
 
-3.  **Negative & Error Cases**: Verify that documented error expressions (e.g., passing invalid types or empty lists where disallowed) produce expected runtime/check errors via `cel_compile` or `cel_evaluate` rather than unhandled panics, diagnosing unexpected failures with the [cel-debugging](../cel-debugging/SKILL.md) skill.
+2.  **Evaluate with Test Inputs (`cel-expr eval`)**: Define test cases providing
+    input variable bindings (e.g., supplying values for all three variables `a`,
+    `b`, and `c`) and the expected result. Run `cel-expr eval` to verify the
+    output matches the documented inline comment:
+
+    ```bash
+    cel-expr eval -env env.json -expr "math.greatest(a, b, c)" \
+      -bindings '{"a": 10, "b": 42, "c": 7}' -expected 42
+    ```
+
+    *   `math.greatest(a, b, c)` with `{a: 10, b: 42, c: 7}` -> evaluates to
+        `42` (`// returns 42`)
+    *   `math.least(a, b, c)` with `{a: 10, b: 42, c: 7}` -> evaluates to
+        `7` (`// returns 7`)
+    *   `math.greatest([a, b, c])` with `{a: 10, b: 42, c: 7}` -> evaluates to
+        `42` (`// returns 42`)
+
+3.  **Negative & Error Cases**: Verify that documented error expressions (e.g.,
+    passing invalid types or empty lists where disallowed) produce expected
+    runtime/check errors via `cel-expr compile` or `cel-expr eval` rather than
+    unhandled panics, diagnosing unexpected failures with the
+    [cel-debugging](../cel-debugging/SKILL.md) skill.
 
 ---
 

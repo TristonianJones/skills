@@ -7,20 +7,26 @@ description: >-
 
 # Common Expression Language (CEL) Debugging Skill
 
-Use this skill to guide diagnosing and resolving correcting issues with CEL
-expressions.
+Use this skill to guide diagnosing and resolving issues with CEL expressions
+using the `cel-expr` CLI:
+
+```bash
+go install github.com/cel-expr/skills/cmd/cel-expr@latest
+alias cel-expr="$(go env GOPATH)/bin/cel-expr"
+```
 
 ## Workflow
 
 1.  **Identify the Phase**: Determine whether the error is a Compilation
     error (syntax and types) or an evaluation error.
-2.  **Locate Environment Configuration**: Verify the variables, types, and
-    extensions declared in the environment configuration JSON file
-    (`envConfig`).
+2.  **Locate Environment Configuration**: Inspect the environment
+    configuration JSON file (such as `user_env.json` or `*_env.json` in the
+    workspace) using `view_file` to verify declared variables, types, and
+    matching field names.
 3.  **Apply Fix**: Correct the expression or environment configuration based
     on the error pattern.
-4.  **Verify**: Re-compile and re-evaluate the expression to ensure issues
-    are resolved.
+4.  **Verify**: Re-compile and re-evaluate the expression using
+    `cel-expr compile` and `cel-expr eval` to ensure issues are resolved.
 
 ## Common Compilation Errors
 
@@ -121,3 +127,21 @@ with the types expected by the function signature:
     cases and add fields incrementally to isolate the runtime failure.
 3.  **Dynamic Type Checks**: Use `type(val) == string` or `type(val) == int` to
     debug unexpected dynamic types at runtime.
+
+## Verification with `cel-expr` CLI
+
+Validate corrected expressions using `cel-expr`:
+
+*   **Compilation check**:
+
+    ```bash
+    cel-expr compile -env <env.json> -expr "<expression>"
+    ```
+
+*   **Evaluation check**:
+
+    ```bash
+    cel-expr eval -env <env.json> -expr "<expression>" -bindings '<json>'
+    # or with a test suite file:
+    cel-expr eval -env <env.json> -expr "<expression>" -tests <tests.json>
+    ```

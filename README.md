@@ -24,6 +24,12 @@ Add the following block to your personal configuration file at
     },
     {
       "path": "<path-to-cel-skills>/skills/cel-debugging"
+    },
+    {
+      "path": "<path-to-cel-skills>/skills/cel-testing"
+    },
+    {
+      "path": "<path-to-cel-skills>/skills/cel-doc-generator"
     }
   ]
 }
@@ -35,12 +41,40 @@ Add the following block to your personal configuration file at
 "Use the cel-authoring skill to create a policy that checks if a user's age is
 over 18."
 
-The agent will then follow the updated workflow in your SKILL.md, calling
-`cel_create_environment`, `cel_generate_prompt`, and `cel_compile` as needed.
+The agent will then follow the updated workflow in your SKILL.md, running
+`cel-expr` CLI commands (`env`, `prompt`, `compile`, `eval`) as needed.
+
+## CLI Tooling (`cel-expr`)
+
+The skills use the standalone `cel-expr` CLI (`cmd/cel-expr`) to author, compile,
+evaluate, and test CEL expressions:
+
+- `cel-expr env -env <path|json>`: Validates environment configuration and type definitions.
+- `cel-expr prompt -env <path|json> -prompt <requirement>`: Generates authoring prompt.
+- `cel-expr compile -env <path|json> -expr <expr>`: Compiles and type-checks CEL expressions.
+- `cel-expr eval -env <path|json> -expr <expr> -tests <path|json>`: Evaluates expressions against test cases and reports branch/node coverage.
+
+### Installing `cel-expr`
+
+Install using Go:
+
+```bash
+go install github.com/cel-expr/skills/cmd/cel-expr@latest
+alias cel-expr="$(go env GOPATH)/bin/cel-expr"
+```
+
+Or build from source:
+
+```bash
+go build -o cel-expr ./cmd/cel-expr
+```
+
+Ensure `cel-expr` is on your `$PATH` (or aliased as above) so the agent can execute it.
 
 ## Releases & Verification
 
-Release binaries for `cel-expr-mcp` are built automatically on releases with SLSA Level 3 provenance and signed using Sigstore (Cosign) keyless signatures.
+Release binaries for `cel-expr` and `cel-expr-mcp` are built automatically on releases with
+SLSA Level 3 provenance and signed using Sigstore (Cosign) keyless signatures.
 
 ### Verifying Signatures with Cosign
 
@@ -76,10 +110,8 @@ sha256sum --ignore-missing -c checksums.txt
 To verify the build provenance using `slsa-verifier`:
 
 ```bash
-slsa-verifier verify-artifact <cel-expr-mcp-archive> \
+slsa-verifier verify-artifact <artifact-archive> \
   --provenance-path multiple.intoto.jsonl \
   --source-uri github.com/cel-expr/skills \
   --source-tag <tag>
 ```
-
-
