@@ -58,7 +58,7 @@ jobs:
           # Binaries to build: NAME:PACKAGE
           BINARIES=(
             "cel-expr-mcp:./cmd/mcp"
-            "cel-expr:./cmd/cli"
+            "cel-expr:./cmd/cel-expr"
           )
           
           for PLATFORM in "${PLATFORMS[@]}"; do
