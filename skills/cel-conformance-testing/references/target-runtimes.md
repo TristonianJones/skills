@@ -57,3 +57,10 @@ behave
 # Or run via pytest
 pytest
 ```
+
+Also, in [`cel-expr/cel-python`](https://github.com/cel-expr/cel-python/blob/main/conformance/BUILD):
+
+```bash
+bazel test //conformance:conformance_test
+```
+
