@@ -292,8 +292,8 @@ func TestCLI_EnvValidate(t *testing.T) {
 	stdout.Reset()
 	stderr.Reset()
 	err = run([]string{"env", "-env", invalidEnv}, &stdout, &stderr, nil)
-	if err == nil {
-		t.Error("expected error for invalid variable type, got nil")
+	if err == nil || !strings.Contains(err.Error(), "-fds") {
+		t.Errorf("expected error suggesting -fds for unknown custom type, got %v", err)
 	}
 
 	stdout.Reset()
