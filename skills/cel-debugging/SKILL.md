@@ -7,26 +7,29 @@ description: >-
 
 # Common Expression Language (CEL) Debugging Skill
 
-Use this skill to guide diagnosing and resolving issues with CEL expressions
-using the `cel-expr` CLI:
+Use this skill only when diagnosing or fixing a broken CEL expression (do not
+invoke `cel-expr` during read-only triage or investigation where no CEL
+expression is being written or debugged):
 
 ```bash
 go install github.com/cel-expr/skills/cmd/cel-expr@latest
 alias cel-expr="$(go env GOPATH)/bin/cel-expr"
+alias proto-fds="protoc --include_imports --descriptor_set_out=/dev/stdout"
 ```
 
 ## Workflow
 
-1.  **Identify the Phase**: Determine whether the error is a Compilation
+1.  **Identify the Phase**: Determine whether the error is a compilation
     error (syntax and types) or an evaluation error.
-2.  **Locate Environment Configuration**: Inspect the environment
-    configuration JSON file (such as `user_env.json` or `*_env.json` in the
-    workspace) using `view_file` to verify declared variables, types, and
-    matching field names.
+2.  **Locate Environment Configuration**: Inspect `<skill_dir>/resources/cel_env.json`
+    or workspace `*_env.json` (conforming to
+    [env_config_schema.json](skills/cel-authoring/references/env_config_schema.json))
+    to verify declared variables, types, and field names before searching
+    codebase evaluator implementations.
 3.  **Apply Fix**: Correct the expression or environment configuration based
     on the error pattern.
-4.  **Verify**: Re-compile and re-evaluate the expression using
-    `cel-expr compile` and `cel-expr eval` to ensure issues are resolved.
+4.  **Verify**: Re-validate the expression using `cel-expr eval` (or
+    `cel-expr compile` when no test bindings are needed).
 
 ## Common Compilation Errors
 
@@ -101,9 +104,9 @@ by zero errors, though you may end up with an infinite value:
 
 ### 3. "No Such Overload" (Runtime)
 
-A function signature is declared in the environment configuration but is not
-registered in the active CEL runtime, or the types at runtime do not agree
-with the types expected by the function signature:
+The runtime types of dynamic (`dyn`) values do not agree with the types expected
+by the function signature, or a required extension is not enabled in the
+environment:
 
 - Issue: `json.data.items.contains('hello')` results in a runtime error of
   no such overload: contains(list, string)
@@ -130,18 +133,19 @@ with the types expected by the function signature:
 
 ## Verification with `cel-expr` CLI
 
-Validate corrected expressions using `cel-expr`:
+Validate corrected expressions using `cel-expr eval` (pass
+`-fds <(proto-fds -I <proto_dir> <schema.proto>)` when protobuf message types are
+referenced; see
+[test_cases_schema.json](skills/cel-testing/references/test_cases_schema.json)
+for the `-tests` schema):
 
-*   **Compilation check**:
+```bash
+cel-expr eval -env <env.json> -expr "<expression>" -bindings '{"var": "val"}' -expected true
+# or with an inline test suite array / file:
+cel-expr eval -env <env.json> -expr "<expression>" \
+  -tests '[{"testCase": "case1", "bindings": {"var": "val"}, "expected": true}]'
+```
 
-    ```bash
-    cel-expr compile -env <env.json> -expr "<expression>"
-    ```
-
-*   **Evaluation check**:
-
-    ```bash
-    cel-expr eval -env <env.json> -expr "<expression>" -bindings '<json>'
-    # or with a test suite file:
-    cel-expr eval -env <env.json> -expr "<expression>" -tests <tests.json>
-    ```
+`cel-expr eval` compiles the expression, runs all runnable test cases, and marks
+any cases whose result depends on unimplemented custom `functions` as `skipped`
+in `skippedTestCases` (use `cel-expr compile` when no test bindings are needed).
