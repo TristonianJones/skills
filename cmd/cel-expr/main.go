@@ -37,8 +37,8 @@ Usage:
   cel-expr <command> [arguments]
 
 Available Commands:
-  compile     Compile a CEL expression against an environment configuration
-  eval        Evaluate a CEL expression against test cases or bindings
+  eval        Compile and evaluate a CEL expression against an environment and optional test cases
+  compile     Alias for compile-only validation (all eval flags except test cases/bindings)
   conformance Evaluate CEL conformance tests from cel-spec textproto files
   env         Validate or inspect an environment configuration
   prompt      Generate an LLM authoring prompt from an environment and requirement
@@ -146,8 +146,12 @@ func runCompile(args []string, stdout, stderr io.Writer, stdin io.Reader) error 
 	exprFlag := fs.String("expr", "", "CEL expression string")
 
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: cel-expr compile [-env <path|json>] [-expr <expr>] [expression]")
-		fmt.Fprintln(stderr, "\nFlags:")
+		fmt.Fprintln(stderr, `Usage: cel-expr compile [-env <path|json>] [-fds <path>] [-expr <expr>] [expression]
+
+Alias for compile-only validation: supports all environment, descriptor, and expression flags
+that 'cel-expr eval' supports, without test cases or bindings. Outputs inputSchema and outputSchema.
+
+Flags:`)
 		fs.PrintDefaults()
 	}
 
@@ -190,15 +194,36 @@ func runEval(args []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	fs.SetOutput(stderr)
 	envFlag, fdsFlag := parseCommonEnvFlags(fs)
 	exprFlag := fs.String("expr", "", "CEL expression string")
-	testsFlag := fs.String("tests", "", "Path to test cases JSON file or inline JSON array")
+	testsFlag := fs.String("tests", "", "Path to test cases JSON file or inline JSON array: '[{\"testCase\": \"...\", \"bindings\": {...}, \"expected\": ...}]'")
 	fs.StringVar(testsFlag, "test_cases", "", "Alias for -tests")
-	conformanceFlag := fs.String("conformance", "", "Path to conformance textproto file or inline textproto content")
-	bindingsFlag := fs.String("bindings", "", "Single test case variable bindings JSON file or inline JSON object")
+	bindingsFlag := fs.String("bindings", "", "Single test case variable bindings JSON file or inline JSON object: '{\"var\": \"val\"}'")
 	expectedFlag := fs.String("expected", "", "Expected output value for single test case binding (JSON literal or string)")
+	conformanceFlag := fs.String("conformance", "", "Path to conformance textproto file or inline textproto content")
 
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: cel-expr eval [-env <path|json>] [-tests <path|json>] [-conformance <path|textproto>] [-bindings <path|json>] [expression]")
-		fmt.Fprintln(stderr, "\nFlags:")
+		fmt.Fprintln(stderr, `Usage: cel-expr eval [-env <path|json>] [-fds <path>] [-tests <path|json>] [-bindings <path|json>] [-expected <json|string>] [-conformance <path|textproto>] [-expr <expr>] [expression]
+
+Compiles and evaluates a CEL expression against an environment configuration:
+  1. Compiles and type-checks the expression (reporting inputSchema and outputSchema).
+  2. Evaluates all runnable test cases from -tests, -bindings/-expected, or -conformance
+     (cel-spec SimpleTestFile/SimpleTest textproto suites) and reports AST coverage.
+  3. Automatically marks test cases that cannot be evaluated at runtime (e.g., branches calling
+     custom functions declared in -env without runtime implementations, or expressions requiring
+     variables when no bindings are provided) as "skipped: ..." and lists them in skippedTestCases.
+  4. Exits 0 when compilation succeeds and all runnable test cases pass; exits non-zero if
+     compilation fails or any runnable test case fails.
+
+Examples:
+  # Single test case with inline bindings and expected value:
+  cel-expr eval -env env.json -bindings '{"x": 10}' -expected true 'x > 5'
+
+  # Test suite with inline JSON array:
+  cel-expr eval -env env.json -tests '[{"testCase": "positive", "bindings": {"x": 10}, "expected": true}]' 'x > 5'
+
+  # Conformance test suite from textproto:
+  cel-expr eval -env env.json -conformance tests.textproto
+
+Flags:`)
 		fs.PrintDefaults()
 	}
 
@@ -287,12 +312,16 @@ func runEval(args []string, stdout, stderr io.Writer, stdin io.Reader) error {
 		return fmt.Errorf("evaluation failed: %w", err)
 	}
 
+	hasExplicitTests := (*testsFlag != "") || (*bindingsFlag != "") || (*expectedFlag != "")
 	hasExpected := (*testsFlag != "") || (*expectedFlag != "")
 
 	for i := range res.TestResults {
 		tr := &res.TestResults[i]
 		if !hasExpected && strings.HasPrefix(tr.Status, "failed: got") {
 			tr.Status = "pass"
+		} else if !hasExplicitTests && strings.HasPrefix(tr.Status, "no such attribute(s):") {
+			tr.Status = fmt.Sprintf("skipped: missing bindings (%s)", tr.Status)
+			res.SkippedTestCases = append(res.SkippedTestCases, tr.TestCase)
 		}
 	}
 
@@ -304,7 +333,7 @@ func runEval(args []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	fmt.Fprintln(stdout, string(outBytes))
 
 	for _, tr := range res.TestResults {
-		if tr.Status != "pass" {
+		if tr.Status != "pass" && !strings.HasPrefix(tr.Status, "skipped:") {
 			return fmt.Errorf("test case %q did not pass (status: %s)", tr.TestCase, tr.Status)
 		}
 	}
