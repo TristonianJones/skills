@@ -22,6 +22,7 @@ go_library(
         "@dev_cel_cel_go//common",
         "@dev_cel_cel_go//common/ast",
         "@dev_cel_cel_go//common/env",
+        "@dev_cel_cel_go//common/functions",
         "@dev_cel_cel_go//common/types",
         "@dev_cel_cel_go//common/types/ref",
         "@dev_cel_cel_go//ext",

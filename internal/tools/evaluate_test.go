@@ -292,3 +292,47 @@ func TestEvaluateCEL_WithProtobufInputs(t *testing.T) {
 		t.Errorf("expected protobuf unmarshal error for case 2, got %s", got.TestResults[2].Status)
 	}
 }
+
+func TestEvaluateCEL_WithCustomFunctions(t *testing.T) {
+	envData, err := os.ReadFile(filepath.Join("testdata", "cloud_armor.json"))
+	if err != nil {
+		t.Fatalf("failed reading cloud_armor.json: %v", err)
+	}
+	var envConfig Config
+	if err := json.Unmarshal(envData, &envConfig); err != nil {
+		t.Fatalf("failed unmarshaling cloud_armor.json: %v", err)
+	}
+
+	expr := `origin.region_code == "US" || inIpRange(origin.ip, "10.0.0.0/8")`
+	testCases := []TestCase{
+		{
+			TestCase: "runnable_short_circuit",
+			Bindings: map[string]any{"origin.ip": "10.0.0.1", "origin.region_code": "US"},
+			Expected: true,
+		},
+		{
+			TestCase: "unrunnable_custom_function",
+			Bindings: map[string]any{"origin.ip": "10.0.0.1", "origin.region_code": "EU"},
+			Expected: true,
+		},
+	}
+
+	got, err := EvaluateCEL(expr, &envConfig, testCases)
+	if err != nil {
+		t.Fatalf("EvaluateCEL() error = %v", err)
+	}
+
+	if len(got.TestResults) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(got.TestResults))
+	}
+	if got.TestResults[0].Status != "pass" {
+		t.Errorf("expected runnable_short_circuit to pass, got %q", got.TestResults[0].Status)
+	}
+	if !strings.HasPrefix(got.TestResults[1].Status, "skipped: unknown function \"inIpRange\"") {
+		t.Errorf("expected unrunnable_custom_function to be skipped due to unknown function, got %q", got.TestResults[1].Status)
+	}
+	if len(got.SkippedTestCases) != 1 || got.SkippedTestCases[0] != "unrunnable_custom_function" {
+		t.Errorf("expected SkippedTestCases = [unrunnable_custom_function], got %v", got.SkippedTestCases)
+	}
+}
+

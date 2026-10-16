@@ -195,6 +195,56 @@ func TestCLI_Eval_StandaloneWithoutEnv(t *testing.T) {
 	}
 }
 
+func TestCLI_Eval_CustomFunctions(t *testing.T) {
+	envJSON := `{
+		"variables": [
+			{"name": "origin.ip", "type": "string"},
+			{"name": "origin.region_code", "type": "string"}
+		],
+		"functions": [
+			{
+				"name": "inIpRange",
+				"overloads": [
+					{"id": "inIpRange_string_string", "args": ["string", "string"], "return": "bool"}
+				]
+			}
+		]
+	}`
+	testsJSON := `[
+		{"testCase": "runnable_us", "bindings": {"origin.ip": "10.0.0.1", "origin.region_code": "US"}, "expected": true},
+		{"testCase": "skipped_eu", "bindings": {"origin.ip": "10.0.0.1", "origin.region_code": "EU"}, "expected": true}
+	]`
+
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"eval", "-env", envJSON, "-tests", testsJSON, `origin.region_code == "US" || inIpRange(origin.ip, "10.0.0.0/8")`}, &stdout, &stderr, nil)
+	if err != nil {
+		t.Fatalf("run(eval with custom functions) failed: %v (stderr: %s)", err, stderr.String())
+	}
+	for _, want := range []string{`"status": "pass"`, `"status": "skipped: unknown function \"inIpRange\"`, `"skippedTestCases"`, `"skipped_eu"`} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("expected %q in output, got:\n%s", want, stdout.String())
+		}
+	}
+
+	// Verify that a failing runnable test case still causes an error even when other test cases are skipped.
+	failingTestsJSON := `[
+		{"testCase": "failing_us", "bindings": {"origin.ip": "10.0.0.1", "origin.region_code": "US"}, "expected": false},
+		{"testCase": "skipped_eu", "bindings": {"origin.ip": "10.0.0.1", "origin.region_code": "EU"}, "expected": true}
+	]`
+	stdout.Reset()
+	stderr.Reset()
+	if err := run([]string{"eval", "-env", envJSON, "-tests", failingTestsJSON, `origin.region_code == "US" || inIpRange(origin.ip, "10.0.0.0/8")`}, &stdout, &stderr, nil); err == nil {
+		t.Error("expected error when runnable test case fails, got nil")
+	}
+
+	// Verify that eval without explicit bindings/tests succeeds when expression compiles but requires variables.
+	stdout.Reset()
+	stderr.Reset()
+	if err := run([]string{"eval", "-env", envJSON, `origin.region_code == "US" || inIpRange(origin.ip, "10.0.0.0/8")`}, &stdout, &stderr, nil); err != nil {
+		t.Fatalf("run(eval without explicit bindings) failed: %v", err)
+	}
+}
+
 func TestCLI_Eval_Errors(t *testing.T) {
 	envJSON := `{"variables":[{"name":"x","type":"int"}]}`
 
