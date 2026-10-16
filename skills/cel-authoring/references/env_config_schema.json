@@ -1,0 +1,276 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CEL Environment Configuration (envConfig)",
+  "description": "Schema for the -env (-environment) JSON input to `cel-expr env`, `cel-expr compile`, `cel-expr eval`, `cel-expr prompt`, and `cel-expr mcp`.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Optional identifier for the CEL environment."
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional human-readable description of the environment."
+    },
+    "container": {
+      "type": "string",
+      "description": "Optional protobuf package container namespace (e.g., 'google.rpc') used for resolving relative type and variable identifiers."
+    },
+    "imports": {
+      "type": "array",
+      "description": "Fully-qualified protobuf type names to import as simple identifiers.",
+      "items": {
+        "$ref": "#/$defs/Import"
+      }
+    },
+    "stdlib": {
+      "$ref": "#/$defs/LibrarySubset",
+      "description": "Optional subset configuration for the CEL standard library."
+    },
+    "extensions": {
+      "type": "array",
+      "description": "CEL extension libraries to enable (e.g., 'strings', 'math', 'lists', 'sets', 'encoders', 'optional', 'bindings', 'protos', 'two-var-comprehensions').",
+      "items": {
+        "$ref": "#/$defs/Extension"
+      }
+    },
+    "contextVariable": {
+      "$ref": "#/$defs/ContextVariable",
+      "description": "Optional protobuf message type whose fields are exposed as top-level variables. Mutually exclusive with variables or used alongside them."
+    },
+    "variables": {
+      "type": "array",
+      "description": "Variables declared in the CEL environment.",
+      "items": {
+        "$ref": "#/$defs/Variable"
+      }
+    },
+    "functions": {
+      "type": "array",
+      "description": "Custom functions and overloads declared in the CEL environment.",
+      "items": {
+        "$ref": "#/$defs/Function"
+      }
+    },
+    "validators": {
+      "type": "array",
+      "description": "AST validators to run during compilation.",
+      "items": {
+        "$ref": "#/$defs/Validator"
+      }
+    },
+    "features": {
+      "type": "array",
+      "description": "CEL runtime/compiler feature flags.",
+      "items": {
+        "$ref": "#/$defs/Feature"
+      }
+    }
+  },
+  "$defs": {
+    "Import": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Fully-qualified protobuf message or enum type name."
+        }
+      }
+    },
+    "LibrarySubset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "disabled": {
+          "type": "boolean",
+          "description": "When true, disables the entire CEL standard library."
+        },
+        "disableMacros": {
+          "type": "boolean",
+          "description": "When true, disables standard CEL macros (has, all, exists, exists_one, map, filter)."
+        },
+        "includeMacros": {
+          "type": "array",
+          "description": "Allowlist of standard macro names to enable.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "excludeMacros": {
+          "type": "array",
+          "description": "Denylist of standard macro names to disable.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "includeFunctions": {
+          "type": "array",
+          "description": "Allowlist of standard library functions and overloads to enable.",
+          "items": {
+            "$ref": "#/$defs/FunctionSubset"
+          }
+        },
+        "excludeFunctions": {
+          "type": "array",
+          "description": "Denylist of standard library functions and overloads to disable.",
+          "items": {
+            "$ref": "#/$defs/FunctionSubset"
+          }
+        }
+      }
+    },
+    "FunctionSubset": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Function or operator name (e.g., '_+_', 'matches')."
+        },
+        "overloads": {
+          "type": "array",
+          "description": "Optional list of specific overload IDs to include or exclude.",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Extension": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Extension name (e.g., 'strings', 'math', 'lists', 'sets', 'encoders', 'optional', 'bindings', 'protos', 'two-var-comprehensions')."
+        },
+        "version": {
+          "type": "string",
+          "description": "Extension version number or 'latest' (defaults to 'latest' or 0 if omitted)."
+        }
+      }
+    },
+    "ContextVariable": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Fully-qualified protobuf message type name without type parameters."
+        }
+      }
+    },
+    "Variable": {
+      "type": "object",
+      "required": ["name", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Variable identifier, optionally namespaced with dots (e.g., 'request.path', 'user')."
+        },
+        "type": {
+          "type": "string",
+          "description": "CEL type formatted as TypeName or namespace.TypeName with optional type parameters in angle brackets <> (e.g., 'string', 'int', 'list<string>', 'map<string, dyn>'). See type_grammar_ebnf.txt."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional description of the variable's meaning and expected format."
+        }
+      }
+    },
+    "Function": {
+      "type": "object",
+      "required": ["name", "overloads"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "camelCase function name, either as a standalone functionName or namespace.functionName."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional description of what the function computes."
+        },
+        "overloads": {
+          "type": "array",
+          "description": "One or more type signatures (overloads) for the function.",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/Overload"
+          }
+        }
+      }
+    },
+    "Overload": {
+      "type": "object",
+      "required": ["id", "return"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique overload ID in the format function_name_type1_..._typeN for global functions or target_type_function_name_type1_..._typeN for member functions."
+        },
+        "target": {
+          "type": "string",
+          "description": "Receiver type name for member functions (e.g., 'string'). Omit for global functions."
+        },
+        "args": {
+          "type": "array",
+          "description": "Positional argument type names formatted according to type_grammar_ebnf.txt.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "return": {
+          "type": "string",
+          "description": "Return type name formatted according to type_grammar_ebnf.txt."
+        },
+        "examples": {
+          "type": "array",
+          "description": "Optional example CEL expressions demonstrating this overload.",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Validator": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Validator name (e.g., 'cel.validator.comprehension_nesting_limit', 'cel.validator.duration', 'cel.validator.format', 'cel.validator.homogeneous_aggregate_literals', 'cel.validator.matches', 'cel.validator.timestamp')."
+        },
+        "config": {
+          "type": "object",
+          "description": "Optional validator-specific configuration key-value pairs.",
+          "additionalProperties": true
+        }
+      }
+    },
+    "Feature": {
+      "type": "object",
+      "required": ["name", "enabled"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Feature flag name (e.g., 'cel.feature.cross_type_numeric_comparisons', 'cel.feature.default_utc_timezone', 'cel.feature.enable_macro_call_tracking', 'cel.feature.enable_quoted_identifiers')."
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the feature is enabled."
+        }
+      }
+    }
+  }
+}
