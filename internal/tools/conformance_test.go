@@ -229,8 +229,40 @@ func TestEvaluateConformanceTestFunc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EvaluateConformanceTest failed: %v", err)
 	}
-	if !res.Passed() {
-		t.Errorf("expected pass, got %s", res.Status)
+	if !res.Passed() || res.Output != "abcdef" {
+		t.Errorf("expected pass with output 'abcdef', got status=%s output=%v", res.Status, res.Output)
+	}
+
+	unkTest := &testpb.SimpleTest{
+		Name: "unknown_test",
+		Expr: "x",
+		TypeEnv: []*expr.Decl{
+			{
+				Name: "x",
+				DeclKind: &expr.Decl_Ident{
+					Ident: &expr.Decl_IdentDecl{
+						Type: &expr.Type{TypeKind: &expr.Type_Primitive{Primitive: expr.Type_INT64}},
+					},
+				},
+			},
+		},
+		Bindings: map[string]*expr.ExprValue{
+			"x": {
+				Kind: &expr.ExprValue_Unknown{
+					Unknown: &expr.UnknownSet{Exprs: []int64{1}},
+				},
+			},
+		},
+		ResultMatcher: &testpb.SimpleTest_AnyUnknowns{
+			AnyUnknowns: &testpb.UnknownSetMatcher{},
+		},
+	}
+	unkRes, err := EvaluateConformanceTest(unkTest, nil)
+	if err != nil {
+		t.Fatalf("EvaluateConformanceTest(unknown) failed: %v", err)
+	}
+	if !unkRes.Passed() || !strings.HasPrefix(unkRes.Output.(string), "unknown:") {
+		t.Errorf("expected pass with unknown output, got status=%s output=%v", unkRes.Status, unkRes.Output)
 	}
 }
 

@@ -47,6 +47,7 @@ func (e *UnimplementedFunctionError) Error() string {
 type TestResult struct {
 	TestCase string `json:"testCase"`
 	Status   string `json:"status"`
+	Output   any    `json:"output,omitempty"`
 }
 
 // EvaluateExprOutput is the output of the EvaluateCEL function.
@@ -70,36 +71,22 @@ func unimplementedFunctionBindings(env *cel.Env, envConfig *Config) []*functions
 		return nil
 	}
 	envFuncs := env.Functions()
-	seen := make(map[string]bool)
 	var bindings []*functions.Overload
 
 	addBinding := func(op, fnName, overloadID string) {
-		if op == "" || seen[op] {
-			return
-		}
-		seen[op] = true
 		errVal := types.WrapErr(&UnimplementedFunctionError{
 			Function: fnName,
 			Overload: overloadID,
 		})
 		bindings = append(bindings, &functions.Overload{
 			Operator: op,
-			Unary: func(arg ref.Val) ref.Val {
-				return errVal
-			},
-			Binary: func(lhs, rhs ref.Val) ref.Val {
-				return errVal
-			},
-			Function: func(args ...ref.Val) ref.Val {
-				return errVal
-			},
+			Unary:    func(ref.Val) ref.Val { return errVal },
+			Binary:   func(ref.Val, ref.Val) ref.Val { return errVal },
+			Function: func(...ref.Val) ref.Val { return errVal },
 		})
 	}
 
 	for _, fn := range envConfig.Functions {
-		if fn == nil || fn.Name == "" {
-			continue
-		}
 		fnDecl := envFuncs[fn.Name]
 		if fnDecl != nil && (fnDecl.HasSingletonBinding() || fnDecl.HasLateBinding()) {
 			continue
@@ -116,7 +103,7 @@ func unimplementedFunctionBindings(env *cel.Env, envConfig *Config) []*functions
 		}
 		var firstUnboundOverloadID string
 		for _, ov := range fn.Overloads {
-			if ov == nil || ov.ID == "" || boundOverloads[ov.ID] {
+			if boundOverloads[ov.ID] {
 				continue
 			}
 			if firstUnboundOverloadID == "" {
@@ -124,12 +111,14 @@ func unimplementedFunctionBindings(env *cel.Env, envConfig *Config) []*functions
 			}
 			addBinding(ov.ID, fn.Name, ov.ID)
 		}
-		if !hasBoundOverload {
+		if !hasBoundOverload && firstUnboundOverloadID != "" {
 			overloadID := ""
-			if len(fn.Overloads) == 1 && firstUnboundOverloadID != "" {
+			if len(fn.Overloads) == 1 {
 				overloadID = firstUnboundOverloadID
 			}
-			addBinding(fn.Name, fn.Name, overloadID)
+			if overloadID != fn.Name {
+				addBinding(fn.Name, fn.Name, overloadID)
+			}
 		}
 	}
 	return bindings
@@ -238,6 +227,7 @@ func EvaluateCEL(expr string, envConfig *Config, testCases []TestCase, opts ...c
 				results = append(results, TestResult{
 					TestCase: tc.TestCase,
 					Status:   fmt.Sprintf("skipped: %v", unimplErr),
+					Output:   fmt.Sprintf("unknown: %v", unimplErr),
 				})
 				skippedTestCases = append(skippedTestCases, tc.TestCase)
 				continue
@@ -245,6 +235,7 @@ func EvaluateCEL(expr string, envConfig *Config, testCases []TestCase, opts ...c
 			results = append(results, TestResult{
 				TestCase: tc.TestCase,
 				Status:   err.Error(),
+				Output:   fmt.Sprintf("error: %v", err),
 			})
 			continue
 		}
@@ -256,6 +247,15 @@ func EvaluateCEL(expr string, envConfig *Config, testCases []TestCase, opts ...c
 			continue
 		}
 		coverageTracker.Record(details)
+		if types.IsUnknown(out) {
+			unkStr := fmt.Sprintf("unknown: %v", out.Value())
+			results = append(results, TestResult{
+				TestCase: tc.TestCase,
+				Status:   unkStr,
+				Output:   unkStr,
+			})
+			continue
+		}
 		val, err := out.ConvertToNative(types.JSONValueType)
 		if err != nil {
 			status = fmt.Sprintf("unexpected output type: %v", out.Value())
@@ -285,6 +285,7 @@ func EvaluateCEL(expr string, envConfig *Config, testCases []TestCase, opts ...c
 		results = append(results, TestResult{
 			TestCase: tc.TestCase,
 			Status:   status,
+			Output:   valJSON,
 		})
 	}
 

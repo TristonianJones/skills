@@ -55,6 +55,7 @@ go_test(
         "@dev_cel_cel_go//common/ast",
         "@dev_cel_cel_go//common/env",
         "@dev_cel_cel_go//common/types",
+        "@dev_cel_cel_go//common/types/ref",
         "@dev_cel_expr//:expr",
         "@dev_cel_expr//conformance/test:go_default_library",
         "@org_golang_google_protobuf//proto",

@@ -42,6 +42,7 @@ import (
 type ConformanceTestResult struct {
 	Name        string `json:"name"`
 	Status      string `json:"status"` // "pass" or detailed failure message
+	Output      any    `json:"output,omitempty"`
 	Section     string `json:"section,omitempty"`
 	File        string `json:"file,omitempty"`
 	Expr        string `json:"expr,omitempty"`
@@ -279,6 +280,20 @@ func checkDeducedType(want *expr.Type, outputType *cel.Type) string {
 	return ""
 }
 
+func refValToOutput(ret ref.Val) any {
+	val, err := ret.ConvertToNative(types.JSONValueType)
+	if err == nil {
+		if msg, ok := val.(proto.Message); ok {
+			valPB := protojson.Format(msg)
+			var valJSON any
+			if err := json.Unmarshal([]byte(valPB), &valJSON); err == nil {
+				return valJSON
+			}
+		}
+	}
+	return fmt.Sprintf("%v", ret.Value())
+}
+
 func evaluateSingleConformanceTest(test *testpb.SimpleTest, exprStr, fullName, sectionName, fileName string, envNoMacros, envWithMacros *cel.Env) ConformanceTestResult {
 	res := ConformanceTestResult{
 		Name:        fullName,
@@ -370,6 +385,15 @@ func evaluateSingleConformanceTest(test *testpb.SimpleTest, exprStr, fullName, s
 			evalErr = errVal.Unwrap()
 		} else {
 			evalErr = fmt.Errorf("%v", ret)
+		}
+	}
+	if evalErr != nil {
+		res.Output = fmt.Sprintf("error: %v", evalErr)
+	} else if ret != nil {
+		if types.IsUnknown(ret) {
+			res.Output = fmt.Sprintf("unknown: %v", ret.Value())
+		} else {
+			res.Output = refValToOutput(ret)
 		}
 	}
 

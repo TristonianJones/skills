@@ -22,6 +22,8 @@ import (
 	"testing"
 
 	"cel.dev/cel-go/cel"
+	"cel.dev/cel-go/common/types"
+	"cel.dev/cel-go/common/types/ref"
 	testpb "github.com/cel-expr/skills/internal/proto"
 )
 
@@ -146,7 +148,7 @@ func TestEvaluateCEL(t *testing.T) {
 			expr:         `"hello".size() == 5`,
 			envConfig:    nil,
 			testCases:    []TestCase{{TestCase: "test-standalone", Expected: true}},
-			wantContains: `"testCase":"test-standalone","status":"pass"`,
+			wantContains: `"testCase":"test-standalone","status":"pass","output":true`,
 			wantErr:      false,
 			wantCoverage: "Node: 100.00%, Branch: 50.00%",
 		},
@@ -155,7 +157,7 @@ func TestEvaluateCEL(t *testing.T) {
 			expr:         `1 + 1`,
 			envConfig:    envJSON,
 			testCases:    []TestCase{{TestCase: "test-no-bindings", Expected: 2.0}},
-			wantContains: `"testCase":"test-no-bindings","status":"pass"`,
+			wantContains: `"testCase":"test-no-bindings","status":"pass","output":2`,
 			wantErr:      false,
 		},
 		{
@@ -365,6 +367,85 @@ func TestEvaluateCEL_WithCustomFunctions(t *testing.T) {
 	}
 	if len(got.SkippedTestCases) != 1 || got.SkippedTestCases[0] != "unrunnable_custom_function" {
 		t.Errorf("expected SkippedTestCases = [unrunnable_custom_function], got %v", got.SkippedTestCases)
+	}
+
+	// Test unary, ternary, multi-overload, singleton-bound, and overload-bound custom functions,
+	// plus value mismatch and unknown outputs.
+	multiFnConfig := &Config{
+		Variables: []*Variable{
+			{Name: "x", Type: "int"},
+		},
+		Functions: []*Function{
+			{
+				Name: "unaryUnimpl",
+				Overloads: []*Overload{
+					{ID: "unaryUnimpl", Args: []string{"int"}, Return: "bool"},
+				},
+			},
+			{
+				Name: "ternaryUnimpl",
+				Overloads: []*Overload{
+					{ID: "ternary_int", Args: []string{"int", "int", "int"}, Return: "bool"},
+					{ID: "ternary_str", Args: []string{"string", "string", "string"}, Return: "bool"},
+				},
+			},
+			{
+				Name: "singletonBound",
+				Overloads: []*Overload{
+					{ID: "singletonBound_int", Args: []string{"int"}, Return: "int"},
+				},
+			},
+			{
+				Name: "overloadBound",
+				Overloads: []*Overload{
+					{ID: "overloadBound_int", Args: []string{"int"}, Return: "int"},
+					{ID: "overloadBound_str", Args: []string{"string"}, Return: "int"},
+				},
+			},
+		},
+	}
+
+	opts := []cel.EnvOption{
+		cel.Function("singletonBound",
+			cel.Overload("singletonBound_int", []*cel.Type{cel.IntType}, cel.IntType),
+			cel.SingletonUnaryBinding(func(val ref.Val) ref.Val { return val }),
+		),
+		cel.Function("overloadBound",
+			cel.Overload("overloadBound_int", []*cel.Type{cel.IntType}, cel.IntType,
+				cel.UnaryBinding(func(val ref.Val) ref.Val { return val }),
+			),
+		),
+	}
+
+	for _, exprStr := range []string{
+		`unaryUnimpl(x)`,
+		`ternaryUnimpl(x, x, x)`,
+		`overloadBound("abc") == 1`,
+	} {
+		out, err := EvaluateCEL(exprStr, multiFnConfig, []TestCase{
+			{TestCase: "skip_case", Bindings: map[string]any{"x": 1.0}, Expected: true},
+		}, opts...)
+		if err != nil {
+			t.Fatalf("EvaluateCEL(%q) unexpected error: %v", exprStr, err)
+		}
+		if len(out.SkippedTestCases) != 1 {
+			t.Errorf("EvaluateCEL(%q) expected 1 skipped test case, got %v (results: %+v)", exprStr, out.SkippedTestCases, out.TestResults)
+		}
+	}
+
+	// Test value mismatch (failed: got ..., expected ...) and types.Unknown output
+	mismatchAndUnkOut, err := EvaluateCEL(`singletonBound(x) + 1`, multiFnConfig, []TestCase{
+		{TestCase: "mismatch", Bindings: map[string]any{"x": 1.0}, Expected: 99.0},
+		{TestCase: "unknown_val", Bindings: map[string]any{"x": types.NewUnknown(1, nil)}, Expected: 2.0},
+	}, opts...)
+	if err != nil {
+		t.Fatalf("EvaluateCEL mismatch/unknown error: %v", err)
+	}
+	if !strings.HasPrefix(mismatchAndUnkOut.TestResults[0].Status, "failed: got") {
+		t.Errorf("expected mismatch status, got %q", mismatchAndUnkOut.TestResults[0].Status)
+	}
+	if !strings.HasPrefix(mismatchAndUnkOut.TestResults[1].Status, "unknown:") {
+		t.Errorf("expected unknown status, got %q", mismatchAndUnkOut.TestResults[1].Status)
 	}
 }
 
