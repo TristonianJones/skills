@@ -1,4 +1,4 @@
-{"testCases":[
+[
   {
     "testCase": "is_admin",
     "bindings": {
@@ -22,5 +22,5 @@
       }
     },
     "expected": false
-  }]
-}
+  }
+]
