@@ -166,8 +166,10 @@ func TestCLI_Eval_Bindings(t *testing.T) {
 		t.Fatalf("run(eval with bindings) failed: %v", err)
 	}
 
-	if !strings.Contains(stdout.String(), `"status": "pass"`) {
-		t.Errorf("expected pass status, got: %s", stdout.String())
+	for _, want := range []string{`"status": "pass"`, `"output": 30`} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("expected %s in output, got: %s", want, stdout.String())
+		}
 	}
 }
 
@@ -179,8 +181,10 @@ func TestCLI_Eval_DefaultEmptyBindings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run(eval default bindings) failed: %v", err)
 	}
-	if !strings.Contains(stdout.String(), `"status": "pass"`) {
-		t.Errorf("expected pass status, got: %s", stdout.String())
+	for _, want := range []string{`"status": "pass"`, `"output": 2`} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("expected %s in output, got: %s", want, stdout.String())
+		}
 	}
 }
 
