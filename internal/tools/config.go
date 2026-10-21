@@ -18,6 +18,7 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"cel.dev/cel-go/cel"
 	celenv "cel.dev/cel-go/common/env"
@@ -325,7 +326,17 @@ func EnvFromConfig(envConfig *Config, opts ...cel.EnvOption) (*cel.Env, error) {
 	}
 	envOpts := append([]cel.EnvOption{}, opts...)
 	envOpts = append(envOpts, cel.FromConfig(celConfig, celext.ExtensionOptionFactory))
-	return cel.NewCustomEnv(envOpts...)
+	env, err := cel.NewCustomEnv(envOpts...)
+	if err != nil {
+		if strings.Contains(err.Error(), "undefined type name:") || strings.Contains(err.Error(), "invalid context proto type:") {
+			if len(opts) == 0 {
+				return nil, fmt.Errorf("%w (provide a binary FileDescriptorSet via -fds <path> if the environment refers to custom protobuf types)", err)
+			}
+			return nil, fmt.Errorf("%w (ensure all custom protobuf types referenced in the environment are included in the -fds FileDescriptorSet)", err)
+		}
+		return nil, err
+	}
+	return env, nil
 }
 
 func parseType(text string) (*celenv.TypeDesc, error) {

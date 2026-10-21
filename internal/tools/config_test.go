@@ -265,6 +265,24 @@ func TestEnvFromConfig(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("custom type without fds suggests -fds", func(t *testing.T) {
+		_, err := EnvFromConfig(&Config{
+			Variables: []*Variable{{Name: "msg", Type: "my.custom.ProtoMessage"}},
+		})
+		if err == nil || !strings.Contains(err.Error(), "-fds") {
+			t.Errorf("expected error suggesting -fds, got: %v", err)
+		}
+	})
+
+	t.Run("custom context variable type without fds suggests -fds", func(t *testing.T) {
+		_, err := EnvFromConfig(&Config{
+			ContextVariable: &ContextVariable{Type: "my.custom.ProtoMessage"},
+		})
+		if err == nil || !strings.Contains(err.Error(), "-fds") {
+			t.Errorf("expected error suggesting -fds, got: %v", err)
+		}
+	})
 }
 
 func TestConfigToCEL(t *testing.T) {
@@ -687,5 +705,20 @@ func TestLibrarySubsetFunctions(t *testing.T) {
 	}
 	if len(celLs.ExcludeFunctions) != 1 || celLs.ExcludeFunctions[0].Name != "exc" {
 		t.Errorf("expected 1 exclude function 'exc', got %v", celLs.ExcludeFunctions)
+	}
+}
+
+func TestEnvFromConfig_MissingCustomTypeHint(t *testing.T) {
+	cfg := &Config{
+		Variables: []*Variable{{Name: "msg", Type: "my.custom.MissingProto"}},
+	}
+	_, err := EnvFromConfig(cfg)
+	if err == nil || !strings.Contains(err.Error(), "-fds <path>") {
+		t.Errorf("expected -fds <path> hint when opts is empty, got: %v", err)
+	}
+
+	_, err = EnvFromConfig(cfg, cel.Container("my.custom"))
+	if err == nil || !strings.Contains(err.Error(), "included in the -fds FileDescriptorSet") {
+		t.Errorf("expected FileDescriptorSet completeness hint when opts are provided, got: %v", err)
 	}
 }
