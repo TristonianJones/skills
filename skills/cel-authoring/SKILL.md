@@ -7,82 +7,99 @@ description: >-
 
 # Common Expression Language (CEL) Authoring Skill
 
-Use this skill to guide authoring, compiling, and testing Common Expression
-Language (CEL) expressions using the `cel-expr` CLI:
+Use this skill only when writing or modifying CEL expressions (do not invoke
+`cel-expr` during read-only triage or investigation where no CEL expression is
+authored or changed):
 
 ```bash
 go install github.com/cel-expr/skills/cmd/cel-expr@latest
 alias cel-expr="$(go env GOPATH)/bin/cel-expr"
+alias proto-fds="protoc --include_imports --descriptor_set_out=/dev/stdout"
 ```
 
 ## Workflow
 
 Follow this end-to-end workflow to author CEL expressions:
 
-1.  **Locate or Create Environment**: Identify/write the CEL environment
-    configuration JSON file (`envConfig`). Run
-    `cel-expr env -env <env.json>` to validate
-    the `envConfig`.
-2.  **Generate Prompt**: Run
-    `cel-expr prompt -env <env.json> -prompt "<requirement>"`
-    with the user request to create the CEL authoring prompt.
-3.  **Create Expression**: Generate CEL using only the authoring prompt. Run
-    `cel-expr compile -env <env.json> -expr "<expr>"`
-    to validate the expression.
-4.  **Evaluate and Test**: Run
-    `cel-expr eval -env <env.json> -expr "<expr>" -tests <tests.json>`
-    to verify behavior and iterate on test coverage until there is >95% node and
-    branch coverage.
+1.  **Locate or Create Environment**: Reuse an existing
+    `<skill_dir>/resources/cel_env.json` or workspace `*_env.json`, or author
+    and validate a new `envConfig` with `cel-expr env -env <env.json>`.
+2.  **Generate Prompt (Optional)**: Skip if you have already read a concise
+    `<env.json>`. Run `cel-expr prompt` only for large/extension-heavy
+    environments or to expand protobuf (`-fds`) field paths.
+3.  **Create, Evaluate, and Test**: Author the expression and run
+    `cel-expr eval` with `-bindings` or `-tests` to compile, evaluate runnable
+    test cases, and achieve >95% node and branch coverage (or `cel-expr compile`
+    when no test bindings are needed).
 
 ## Locate or Create Environment
 
-Find the environment definition containing the variables, functions, macros and
-features supported in your CEL expression using `code_search`, `find_by_name`,
-or `grep_search` and the `view_file` tool to read it.
+Check for an existing `<skill_dir>/resources/cel_env.json` or workspace
+`*_env.json` first and read it before searching evaluator source code.
 
-If the environment does not exist, generate an `envConfig` object and run
-`cel-expr env -env <env.json>` to validate it.
+If no environment JSON exists, search the codebase for how the CEL environment
+is configured (variables, functions, macros, and features), generate an
+`envConfig` object conforming to
+[env_config_schema.json](skills/cel-authoring/references/env_config_schema.json),
+and validate it:
+
+```bash
+cel-expr env -env <env.json>
+```
 
 *   Namespaced variables with simple types improve correctness checks.
 *   Use namespacing for related concepts, e.g. `request.path`, `request.time`.
-*   Use protobuf object types for strongly typed structured data.
-*   Only use `map<string, dyn>` the variable is a dynamic structure like JSON
+*   Use protobuf object types for strongly typed structured data. When
+    referencing `.proto` message types, pass `-fds` inline using `proto-fds`:
+    ```bash
+    cel-expr env -env <env.json> -fds <(proto-fds -I <proto_dir> <schema.proto>)
+    ```
+*   Only use `map<string, dyn>` when the variable is a dynamic structure like JSON.
 *   Type names are formatted according to:
     [type_grammar_ebnf.txt](skills/cel-authoring/references/type_grammar_ebnf.txt).
 
-Save the `envConfig` json using `write_to_file` after validation.
+Save the `envConfig` JSON to a file after validation.
 
-## Generate Prompt
+## Generate Prompt (Optional)
 
-Provide the JSON environment to `cel-expr prompt` with the user's original
-request:
-
-```bash
-cel-expr prompt -env <env.json> -prompt "<user request>"
-```
-
-Exclusively use the output CEL prompt for generating expressions.
-
-## Create Expression
-
-Use the CEL prompt to create the simplest possible expression which satisfies
-the user's requirements. Run `cel-expr compile` to validate the CEL:
+If you have already read a concise `<env.json>`, skip `cel-expr prompt` and
+proceed directly to `cel-expr eval`. Reserve `cel-expr prompt` for large or
+extension-heavy environments, or when protobuf descriptor (`-fds`) field paths
+need to be expanded:
 
 ```bash
-cel-expr compile -env <env.json> -expr "<expression>"
+cel-expr prompt -env <env.json> [-fds <(proto-fds -I <proto_dir> <schema.proto>)] \
+  -prompt "<user request>"
 ```
 
-Correct errors with the
-[cel-debugging](skills/cel-debugging/SKILL.md)
-skill.
+## Create, Evaluate, and Test
 
-## Evaluate and Test
+Create the simplest possible expression that satisfies the user's requirements
+and run `cel-expr eval` to compile, type-check, and evaluate in one step (use
+`cel-expr compile` as an alias when no test cases or bindings are needed).
+Correct any compilation or runtime errors with the
+[cel-debugging](skills/cel-debugging/SKILL.md) skill.
 
-Run `cel-expr eval` with an expression and test cases to validate an expression:
+For a single test case, pass `-bindings` and `-expected`:
 
 ```bash
-cel-expr eval -env <env.json> -expr "<expression>" -tests <tests.json>
+cel-expr eval -env <env.json> -expr "<expression>" \
+  -bindings '{"request.path": "/api/v1/users"}' -expected true
 ```
+
+For a test suite, pass `-tests` as an inline JSON array string (avoiding
+temporary files) or a file path. The `-tests` payload must be a top-level JSON
+array (`[...]`) of `{"testCase", "bindings", "expected"}` objects conforming to
+[test_cases_schema.json](skills/cel-testing/references/test_cases_schema.json):
+
+```bash
+cel-expr eval -env <env.json> -expr "<expression>" \
+  -tests '[{"testCase": "valid path", "bindings": {"request.path": "/api/v1/users"}, "expected": true}, {"testCase": "invalid path", "bindings": {"request.path": "/other"}, "expected": false}]'
+```
+
+When `<env.json>` declares custom `functions` without runtime implementations,
+`cel-expr eval` runs all runnable test cases and marks test cases whose result
+depends on an unknown function as `skipped` (enumerated in `skippedTestCases`).
 
 Test cases must cover edge cases and missing fields to ensure robustness
 and correctness. Prune tests which do not increase coverage.
