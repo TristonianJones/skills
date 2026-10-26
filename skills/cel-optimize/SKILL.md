@@ -40,8 +40,8 @@ alias cel-expr="$(go env GOPATH)/bin/cel-expr"
     '{"extensions":[{"name":"optional","version":"latest"}]}'`). Fix any
     existing errors first using
     [cel-debugging](skills/cel-debugging/SKILL.md).
-2.  **Simplify**: Apply boolean, membership (`in`), constant folding,
-    optional, or `cel.bind` simplifications. Only introduce `cel.bind`
+2.  **Simplify**: Apply boolean, membership (`in`), constant folding, WKT
+    literal, optional, or `cel.bind` simplifications. Only introduce `cel.bind`
     if `bindings` is enabled in `<env.json>`, and `.?` / `[?]` / `optional.*` if
     `optional` is enabled (`cel-verifier` enables standard extensions
     unconditionally, so check `<env.json>` first).
@@ -76,7 +76,11 @@ cel-verifier verify-equiv \
 
 *   **Supported `--var` (`-v`) Types**: `int`, `uint`, `string`, `bool`,
     `double`, `bytes`, `dyn`, `timestamp`, `duration`, `list<T>`, `map<K, V>`,
-    and `optional<T>`. Namespaced variables (e.g., `request.path`) are
+    `optional<T>`, and `google.protobuf.*` Well-Known Types (`Value`, `Struct`,
+    `ListValue`, `Int64Value`, `Int32Value`, `UInt64Value`, `UInt32Value`,
+    `DoubleValue`, `FloatValue`, `BoolValue`, `StringValue`, `BytesValue`,
+    `Timestamp`, and `Duration`; WKT support requires a `verifier-cli` release
+    newer than `0.14.0`). Namespaced variables (e.g., `request.path`) are
     supported.
 *   **Other Subcommands**:
     *   `check-sat --expr "<expr>"`: Dead branch check (`[VIOLATED]` ⇒
@@ -153,7 +157,7 @@ cel.bind(auth, request.headers['authorization'].lowerAscii(),
     *   **Zero/Empty Literals ⇔ `optional.none()`**: `0`, `0u`, `0.0`, `''`,
         `false`, `b''`, `timestamp(0)`, `duration('0s')`, `[]`,
         `[?optional.none()]`, `{}`, `{?'a': optional.none()}`, `null`, and empty
-        Proto3 messages (`Msg{}`).
+        Proto3 messages (`Msg{}`, `Timestamp{}`, `Duration{}`).
     *   **Non-Zero Literals ⇔ `optional.of(v)`**: `42`, `42u`, `3.14`, `'hi'`,
         `true`, `b'abc'`, `[1, 2]`, `{'k': 1}`, `Msg{field: 1}`, or folded
         expressions (`optional.ofNonZeroValue(1 + 2)` ⇔ `optional.of(3)`).
@@ -181,17 +185,59 @@ cel.bind(auth, request.headers['authorization'].lowerAscii(),
         `optional.none()`; `{'a': {'b': 42}}.?a.?b` ⇔ `optional.of(42)`; `{'a':
         1}[?'missing']` / `{'a': 1}.?missing` ⇔ `optional.none()`
 
+### Well-Known Type (WKT) Message Construction Simplification
+
+`google.protobuf.*` WKT message constructions unwrap at runtime to native CEL
+values. Simplify verbose WKT struct literals directly to native CEL literals:
+
+| WKT Message Type | Construction Examples | Simplified Native CEL |
+| :--- | :--- | :--- |
+| `google.protobuf.Value` | `Value{}`, `Value{null_value: 0}`, `Value{?null_value: optional.none()}`, `Value{?null_value: optional.of(0)}`, `Value{?string_value: optional.none()}` | `null` |
+| `google.protobuf.Value` | `Value{bool_value: true}`, `Value{number_value: 1.0}`, `Value{string_value: 'hi'}`, `Value{?string_value: optional.of('hi')}` | `true`, `1.0` (`== 1`), `'hi'` |
+| `google.protobuf.ListValue` | `ListValue{}`, `ListValue{?values: optional.none()}` / `ListValue{values: [1, 2]}`, `ListValue{?values: optional.of([1, 2])}` | `[]` / `[1, 2]` |
+| `google.protobuf.Struct` | `Struct{}`, `Struct{?fields: optional.none()}` / `Struct{fields: {'a': 1, ?'b': optional.of(2), ?'c': optional.none()}}` | `{}` / `{'a': 1, 'b': 2}` |
+| `Int64Value`, `Int32Value` | `Int64Value{value: 42}` / `Int64Value{}`, `Int64Value{?value: optional.none()}` | `42` / `0` |
+| `UInt64Value`, `UInt32Value` | `UInt64Value{value: 42u}` / `UInt64Value{}` | `42u` / `0u` |
+| `DoubleValue`, `FloatValue` | `DoubleValue{value: 3.14}` / `DoubleValue{}` | `3.14` / `0.0` |
+| `BoolValue` | `BoolValue{value: true}` / `BoolValue{}`, `BoolValue{?value: optional.none()}` | `true` / `false` |
+| `StringValue`, `BytesValue` | `StringValue{value: 'a'}`, `BytesValue{value: b'a'}` / `StringValue{}`, `BytesValue{}` | `'a'`, `b'a'` / `''`, `b''` |
+| `Timestamp`, `Duration` | `Timestamp{seconds: 100}`, `Timestamp{}` / `Duration{seconds: 60}`, `Duration{}` | `timestamp(100)`, `timestamp(0)` / `duration('60s')`, `duration('0s')` |
+
+*   **Timestamp & Duration Identities (`[VERIFIED]` in `cel-verifier`)**:
+    `timestamp(ts)` ⇔ `ts`, `duration(dur)` ⇔ `dur`, `int(timestamp(100))` ⇔
+    `100`, `ts + dur` ⇔ `dur + ts`, `dur1 + dur2` ⇔ `dur2 + dur1`,
+    `google.protobuf.Timestamp{seconds: x}` ⇔ `timestamp(x)`,
+    `Timestamp{seconds: 1, nanos: 500000000} + Duration{nanos: 500000000}` ⇔
+    `timestamp(2)`. (Note: `timestamp(int(ts))` ⇎ `ts` when `ts` has non-zero
+    `nanos`.)
+*   **Verifier Support**: `cel-verifier` registers and unwraps
+    `google.protobuf.*` Well-Known Types (`Value`, `Struct`, `ListValue`,
+    wrapper types, `Timestamp`, and `Duration`) by default (`[VERIFIED]`) in
+    `verifier-cli` releases newer than `0.14.0`. Note
+    that `timestamp('<rfc3339>')` and `duration('<str>')` string parsing is
+    modeled as uninterpreted in Z3 (`[INCONCLUSIVE]`), so compare against epoch
+    `timestamp(seconds)` or validate string-parsed time literals with `cel-expr
+    eval`.
+
 ## 3. Semantic Pitfalls & `[INCONCLUSIVE]` Handling
 
 *   **Error Preservation & Narrowing**: Removing a guard around a failing or
     narrowing operation is `[VIOLATED]` (`'k' in m && m['k'] == 'v'` ⇎ `m['k']
-    == 'v'` when `m = {}`; `x / x == 1` ⇎ `true` when `x = 0`).
+    == 'v'` when `m = {}`; `x / x == 1` ⇎ `true` when `x = 0`;
+    `Int32Value{value: x}` ⇎ `x` when `x` overflows 32-bit bounds;
+    `FloatValue{value: 0.1}` ⇎ `0.1` due to 32-bit `float` precision narrowing).
 *   **`NaN` & `dyn` Reflexivity**: `d == d` and `v in [1, v]` are `[VIOLATED]`
     for `double` / `dyn` when `d = NaN`. Reflexive equality (`x == x` ⇔ `true`)
     is only valid for `int`, `uint`, `string`, `bool`, `bytes`.
-*   **Proto3 Scalar Defaults**: `has(msg.single_int32) ? msg.single_int32 : 0`
-    ⇔ `msg.single_int32` (`0` is default; fallback `1` is `[VIOLATED]`).
-    `Msg{single_int32: 0}.?single_int32` ⇔ `optional.none()`.
+*   **Proto3 Scalar Defaults vs Wrapper Fields**:
+    *   Scalar field: `has(msg.single_int32) ? msg.single_int32 : 0` ⇔
+        `msg.single_int32` (`0` is default; fallback `1` is `[VIOLATED]`).
+        `Msg{single_int32: 0}.?single_int32` ⇔ `optional.none()`.
+    *   Wrapper field: Unset `Msg{}.single_int64_wrapper` is `null`
+        (`Msg{}.?single_int64_wrapper` ⇔ `optional.none()`), whereas explicitly
+        setting `0` is present (`Msg{single_int64_wrapper:
+        0}.?single_int64_wrapper` ⇔ `optional.of(0)`). Standalone
+        `google.protobuf.Int64Value{}` evaluates to `0`, not `null`.
 *   **Symbolic Optionals & Null Map Values**: `[1, ?opt_var]` cannot be pruned
     to `[1]` or `[1, opt_var]`. On `map<string, dyn>`, `{'a': null}.?a` is
     `optional.of(null)` and `{'a': optional.none()}.?a` is
